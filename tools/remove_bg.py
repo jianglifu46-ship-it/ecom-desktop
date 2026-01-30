@@ -147,6 +147,12 @@ def remove_background_from_image(image: Image.Image) -> Optional[Image.Image]:
         result = Image.open(io.BytesIO(output_data))
         result = result.convert('RGBA')
         
+        # 裁剪透明边界，让选框贴合实际内容
+        bbox = result.getbbox()
+        if bbox:
+            result = result.crop(bbox)
+            print(f"[抠图] 已裁剪透明边界，原始边界: {bbox}")
+        
         print(f"[抠图] 处理完成，结果尺寸: {result.size}")
         return result
         

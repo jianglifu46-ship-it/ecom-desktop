@@ -338,19 +338,56 @@ class CanvasWidget(QWidget):
                 dy = int((pos.y() - self.drag_start.y()) / self.scale)
                 
                 ox, oy, ow, oh = self.drag_layer_start
+                aspect_ratio = ow / oh if oh > 0 else 1  # 原始宽高比
                 
-                # 根据控制点调整大小
-                if self.resize_handle in [0, 3, 5]:  # 左边
-                    layer.x = ox + dx
-                    layer.width = max(10, ow - dx)
-                if self.resize_handle in [2, 4, 7]:  # 右边
-                    layer.width = max(10, ow + dx)
-                if self.resize_handle in [0, 1, 2]:  # 上边
-                    layer.y = oy + dy
-                    layer.height = max(10, oh - dy)
-                if self.resize_handle in [5, 6, 7]:  # 下边
-                    layer.height = max(10, oh + dy)
+                # 四个角点保持比例缩放
+                if self.resize_handle in [0, 2, 5, 7]:  # 角点
+                    # 根据拖动距离较大的方向计算新尺寸
+                    if abs(dx) > abs(dy):
+                        # 水平方向主导
+                        if self.resize_handle in [0, 5]:  # 左侧角点
+                            new_w = max(10, ow - dx)
+                        else:  # 右侧角点
+                            new_w = max(10, ow + dx)
+                        new_h = int(new_w / aspect_ratio)
+                    else:
+                        # 垂直方向主导
+                        if self.resize_handle in [0, 2]:  # 上侧角点
+                            new_h = max(10, oh - dy)
+                        else:  # 下侧角点
+                            new_h = max(10, oh + dy)
+                        new_w = int(new_h * aspect_ratio)
+                    
+                    new_w = max(10, new_w)
+                    new_h = max(10, new_h)
+                    
+                    # 调整位置（左上角点需要移动）
+                    if self.resize_handle == 0:  # 左上
+                        layer.x = ox + (ow - new_w)
+                        layer.y = oy + (oh - new_h)
+                    elif self.resize_handle == 2:  # 右上
+                        layer.y = oy + (oh - new_h)
+                    elif self.resize_handle == 5:  # 左下
+                        layer.x = ox + (ow - new_w)
+                    # 右下角不需要移动位置
+                    
+                    layer.width = new_w
+                    layer.height = new_h
+                else:
+                    # 边缘控制点：自由缩放
+                    if self.resize_handle == 3:  # 左中
+                        layer.x = ox + dx
+                        layer.width = max(10, ow - dx)
+                    elif self.resize_handle == 4:  # 右中
+                        layer.width = max(10, ow + dx)
+                    elif self.resize_handle == 1:  # 上中
+                        layer.y = oy + dy
+                        layer.height = max(10, oh - dy)
+                    elif self.resize_handle == 6:  # 下中
+                        layer.height = max(10, oh + dy)
                 
+                # 清除该图层的缓存
+                self.invalidate_layer_cache(layer.id)
                 self.update()
         
         else:
