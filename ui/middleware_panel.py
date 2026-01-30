@@ -97,7 +97,7 @@ class MiddlewarePanel(QWidget):
     def _load_web_content(self):
         """加载网页内容"""
         # 加载中台页面
-        self.web_view.load(QUrl("http://localhost:3000/"))
+        self.web_view.load(QUrl("https://ecom-admin.manus.space/"))
         
         # 页面加载完成后注入WebChannel支持代码
         self.web_view.page().loadFinished.connect(self._inject_webchannel_script)
