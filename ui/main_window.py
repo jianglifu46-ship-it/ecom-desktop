@@ -31,6 +31,7 @@ from .ai_panel import AIPanel
 from .middleware_panel import MiddlewarePanel
 from .tab_manager import TabManager
 from .export_dialog import ExportDialog
+from .progress_dialog import run_with_progress
 
 
 class MainWindow(QMainWindow):
@@ -618,17 +619,41 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "提示", "请选择图片图层")
                 return
             
-            from tools.remove_bg import remove_background_from_image, is_available, get_error_message
+            from tools.remove_bg import is_available, get_error_message
             if not is_available():
                 err_msg = get_error_message()
-                QMessageBox.warning(self, "提示", f"抠图功能不可用\n{err_msg}\n\n请安装: pip install rembg")
+                QMessageBox.warning(self, "提示", f"抠图功能不可用\n{err_msg}\n\n请安装: pip install rembg[cpu]")
                 return
             
             if layer._image is None:
                 QMessageBox.warning(self, "提示", "图层图片未加载")
                 return
             
-            result = remove_background_from_image(layer._image)
+            # 使用后台线程和进度对话框
+            from tools.remove_bg import remove_background_from_image
+            
+            # 检查是否首次使用（模型未下载）
+            import os
+            model_path = os.path.expanduser("~/.u2net/u2net.onnx")
+            is_first_time = not os.path.exists(model_path)
+            
+            hint = ""
+            if is_first_time:
+                hint = "首次使用需要下载 AI 模型（约170MB），请耐心等待..."
+            
+            result, error = run_with_progress(
+                self,
+                "智能抠图",
+                "正在处理图片，请稍候...",
+                hint,
+                remove_background_from_image,
+                layer._image
+            )
+            
+            if error:
+                QMessageBox.critical(self, "错误", f"抠图失败:\n{error}")
+                return
+            
             if result:
                 layer.set_image(result)
                 self.canvas_editor.canvas_widget.history.save_state("智能抠图")
@@ -664,8 +689,23 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "提示", "图层图片未加载")
                 return
             
+            # 使用后台线程和进度对话框
             from tools.enhance import enhance_image
-            result = enhance_image(layer._image, "auto")
+            
+            result, error = run_with_progress(
+                self,
+                "图片增强",
+                "正在增强图片，请稍候...",
+                "",
+                enhance_image,
+                layer._image,
+                "auto"
+            )
+            
+            if error:
+                QMessageBox.critical(self, "错误", f"增强失败:\n{error}")
+                return
+            
             if result:
                 layer.set_image(result)
                 self.canvas_editor.canvas_widget.history.save_state("图片增强")
