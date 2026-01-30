@@ -1,0 +1,43 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyqt6 pillow requests pyinstaller
+    
+    - name: Build EXE
+      run: |
+        python -m PyInstaller --name="EcomDesigner" --windowed --onedir --icon=assets/icons/app.ico --add-data="assets;assets" --add-data="templates;templates" --hidden-import=PyQt6.sip main.py
+      continue-on-error: true
+    
+    - name: Build EXE (fallback without icon)
+      if: failure()
+      run: |
+        python -m PyInstaller --name="EcomDesigner" --windowed --onedir --add-data="assets;assets" --add-data="templates;templates" --hidden-import=PyQt6.sip main.py
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: EcomDesigner-Windows
+        path: dist/EcomDesigner/
+        retention-days: 30
