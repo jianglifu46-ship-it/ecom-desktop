@@ -655,7 +655,9 @@ class MainWindow(QMainWindow):
                 return
             
             if result:
-                layer.set_image(result)
+                layer.set_image(result, auto_resize=False)  # 不要重新缩放
+                # 清除该图层的缓存，确保显示更新
+                self.canvas_editor.canvas_widget.invalidate_layer_cache(layer.id)
                 self.canvas_editor.canvas_widget.history.save_state("智能抠图")
                 self.canvas_editor.canvas_widget.update()
                 QMessageBox.information(self, "成功", "抠图完成")
@@ -707,7 +709,9 @@ class MainWindow(QMainWindow):
                 return
             
             if result:
-                layer.set_image(result)
+                layer.set_image(result, auto_resize=False)  # 不要重新缩放
+                # 清除该图层的缓存，确保显示更新
+                self.canvas_editor.canvas_widget.invalidate_layer_cache(layer.id)
                 self.canvas_editor.canvas_widget.history.save_state("图片增强")
                 self.canvas_editor.canvas_widget.update()
                 QMessageBox.information(self, "成功", "增强完成")
