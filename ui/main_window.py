@@ -32,6 +32,7 @@ from .middleware_panel import MiddlewarePanel
 from .tab_manager import TabManager
 from .export_dialog import ExportDialog
 from .progress_dialog import run_with_progress
+from .mask_editor import MaskEditorDialog, InteractiveRemoveBgDialog, pil_to_qimage, qimage_to_pil
 
 
 class MainWindow(QMainWindow):
@@ -605,7 +606,7 @@ class MainWindow(QMainWindow):
             self.canvas_editor.canvas_widget.update()
     
     def _on_remove_bg(self):
-        """抠图"""
+        """抠图 - 交互式抠图"""
         try:
             canvas = self.canvas_editor.get_canvas()
             layer = canvas.get_selected_layer()
@@ -629,40 +630,28 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "提示", "图层图片未加载")
                 return
             
-            # 使用后台线程和进度对话框
-            from tools.remove_bg import remove_background_from_image
-            
             # 检查是否首次使用（模型未下载）
             import os
             model_path = os.path.expanduser("~/.u2net/u2net.onnx")
             is_first_time = not os.path.exists(model_path)
             
-            hint = ""
             if is_first_time:
-                hint = "首次使用需要下载 AI 模型（约170MB），请耐心等待..."
+                QMessageBox.information(
+                    self, "提示",
+                    "首次使用抠图功能需要下载 AI 模型（约170MB）\n点击“开始抠图”后请耐心等待..."
+                )
             
-            result, error = run_with_progress(
-                self,
-                "智能抠图",
-                "正在处理图片，请稍候...",
-                hint,
-                remove_background_from_image,
-                layer._image
-            )
+            # 转换为 QImage 并打开交互式抠图对话框
+            original_qimage = pil_to_qimage(layer._image)
+            dialog = InteractiveRemoveBgDialog(original_qimage, parent=self)
             
-            if error:
-                QMessageBox.critical(self, "错误", f"抠图失败:\n{error}")
-                return
-            
-            if result:
-                layer.set_image(result, auto_resize=False)  # 不要重新缩放
-                # 清除该图层的缓存，确保显示更新
-                self.canvas_editor.canvas_widget.invalidate_layer_cache(layer.id)
-                self.canvas_editor.canvas_widget.history.save_state("智能抠图")
-                self.canvas_editor.canvas_widget.update()
-                QMessageBox.information(self, "成功", "抠图完成")
-            else:
-                QMessageBox.warning(self, "失败", "抠图处理失败，请查看控制台日志")
+            if dialog.exec() == InteractiveRemoveBgDialog.DialogCode.Accepted:
+                result = dialog.get_result()
+                if result:
+                    layer.set_image(result, auto_resize=False)
+                    self.canvas_editor.canvas_widget.invalidate_layer_cache(layer.id)
+                    self.canvas_editor.canvas_widget.history.save_state("智能抠图")
+                    self.canvas_editor.canvas_widget.update()
         except Exception as e:
             import traceback
             traceback.print_exc()
