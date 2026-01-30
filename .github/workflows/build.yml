@@ -35,9 +35,16 @@ jobs:
       run: |
         python -m PyInstaller --name="EcomDesigner" --windowed --onedir --add-data="assets;assets" --add-data="templates;templates" --hidden-import=PyQt6.sip main.py
     
+    - name: List dist directory
+      run: |
+        dir dist
+        dir dist\EcomDesigner || echo "EcomDesigner folder not found"
+      continue-on-error: true
+    
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: EcomDesigner-Windows
         path: dist/EcomDesigner/
         retention-days: 30
+        if-no-files-found: warn
