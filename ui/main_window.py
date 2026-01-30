@@ -28,6 +28,8 @@ from .property_panel import PropertyPanel
 from .screen_panel import ScreenPanel
 from .assets_panel import AssetsPanel
 from .ai_panel import AIPanel
+from .middleware_panel import MiddlewarePanel
+from .tab_manager import TabManager
 from .export_dialog import ExportDialog
 
 
@@ -70,7 +72,23 @@ class MainWindow(QMainWindow):
         self.toolbar = Toolbar()
         main_layout.addWidget(self.toolbar)
         
-        # 主内容区域
+        # 创建标签页管理器
+        self.tab_manager = TabManager()
+        main_layout.addWidget(self.tab_manager, 1)
+        
+        # 创建编辑器页面内容
+        editor_widget = self._create_editor_widget()
+        self.tab_manager.add_editor_tab(editor_widget, "编辑器")
+        
+        # 创建中台页面内容
+        self.middleware_panel = MiddlewarePanel()
+        self.tab_manager.add_middleware_tab(self.middleware_panel, "中台")
+        
+        # 连接标签页切换信号
+        self.tab_manager.tab_changed.connect(self._on_tab_changed)
+    
+    def _create_editor_widget(self):
+        """创建编辑器页面内容"""
         content_splitter = QSplitter(Qt.Orientation.Horizontal)
         
         # 左侧面板
@@ -124,7 +142,16 @@ class MainWindow(QMainWindow):
         content_splitter.setStretchFactor(1, 1)
         content_splitter.setStretchFactor(2, 0)
         
-        main_layout.addWidget(content_splitter, 1)
+        return content_splitter
+    
+    def _on_tab_changed(self, index):
+        """标签页切换处理"""
+        if index == 0:  # 编辑器标签页
+            # 可以在这里添加切换到编辑器时的逻辑
+            pass
+        elif index == 1:  # 中台标签页
+            # 可以在这里添加切换到中台时的逻辑
+            pass
     
     def _setup_menu(self):
         """设置菜单栏"""
@@ -392,6 +419,10 @@ class MainWindow(QMainWindow):
         
         # 任务面板信号
         self.task_panel.task_selected.connect(self._on_task_selected)
+        
+        # 中台面板信号
+        if hasattr(self.middleware_panel, 'bridge'):
+            self.middleware_panel.bridge.data_received.connect(self._on_middleware_data_received)
     
     def _start_polling(self):
         """启动任务轮询"""
@@ -720,3 +751,22 @@ class MainWindow(QMainWindow):
         """登录成功"""
         self.connection_label.setText(f"● {user.name}")
         self._start_polling()
+    
+    def _on_middleware_data_received(self, data):
+        """处理来自中台的数据"""
+        print(f"收到中台数据: {data}")
+        # 这里可以根据中台传来的数据进行相应处理
+        # 例如更新画布、切换任务等
+        
+        if data.get('type') == 'update_canvas':
+            # 如果中台发送了画布更新数据
+            pass
+        elif data.get('type') == 'switch_task':
+            # 如果中台请求切换任务
+            pass
+        # 可以根据需要添加更多处理逻辑
+    
+    def send_to_middleware(self, data):
+        """向中台发送数据"""
+        if hasattr(self, 'middleware_panel'):
+            self.middleware_panel.send_to_web(data)
