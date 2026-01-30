@@ -140,28 +140,33 @@ class APIClient:
         """当前用户"""
         return self._user
     
-    def login(self, email: str, password: str) -> User:
-        """登录"""
+    def login(self, username: str, password: str) -> User:
+        """登录（使用 REST API 方式）"""
         try:
             result = self._request("POST", APIConfig.LOGIN, {
-                "email": email,
+                "username": username,
                 "password": password
             })
             
-            data = result.get("result", {}).get("data", {})
-            self._token = data.get("token")
+            # REST API 响应格式
+            if not result.get("success"):
+                raise APIError(result.get("error", "登录失败"))
             
-            user_data = data.get("user", {})
+            self._token = result.get("token")
+            
+            user_data = result.get("user", {})
             self._user = User(
-                id=user_data.get("id", ""),
+                id=str(user_data.get("id", "")),
                 name=user_data.get("name", ""),
-                email=user_data.get("email", email),
+                email=user_data.get("email", username),
                 role=user_data.get("role", "designer"),
                 avatar=user_data.get("avatar", "")
             )
             
             self._save_token()
             return self._user
+        except APIError:
+            raise
         except Exception as e:
             raise APIError(f"登录失败: {str(e)}")
     

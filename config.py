@@ -41,7 +41,7 @@ class APIConfig:
     BASE_URL = PROD_BASE_URL
     
     # API 端点
-    LOGIN = "/api/trpc/auth.login"
+    LOGIN = "/api/auth/login"
     GET_MY_TASKS = "/api/trpc/tasks.getMyTasks"
     TASKS = "/api/trpc/tasks.getMyTasks"  # 别名
     GET_TASK_DETAIL = "/api/trpc/tasks.getTaskDetail"
