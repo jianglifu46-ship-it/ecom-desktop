@@ -56,6 +56,9 @@ class CanvasWidget(QWidget):
         self.show_guides = True
         self.guide_lines = []
         
+        # 图层缓存（优化性能）
+        self._pixmap_cache = {}  # layer_id -> (cache_key, QPixmap)
+        
         self._setup_ui()
         self.setMouseTracking(True)
         self.setAcceptDrops(True)
@@ -88,11 +91,11 @@ class CanvasWidget(QWidget):
         # 绘制画布背景（白色）
         painter.fillRect(canvas_x, canvas_y, canvas_w, canvas_h, QColor(self.canvas.background_color))
         
-        # 绘制分屏分隔线
-        self._draw_screen_dividers(painter, canvas_x, canvas_y)
-        
-        # 渲染图层
+        # 先渲染图层（图层在分屏标签下面）
         self._draw_layers(painter, canvas_x, canvas_y)
+        
+        # 再绘制分屏分隔线和标签（在图层上面）
+        self._draw_screen_dividers(painter, canvas_x, canvas_y)
         
         # 绘制选中图层的边框和控制点
         self._draw_selection(painter, canvas_x, canvas_y)
@@ -137,9 +140,14 @@ class CanvasWidget(QWidget):
                 painter.setPen(QColor("white"))
                 painter.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, screen.name[:8])
             else:
-                # 留白区域
+                # 留白区域 - 使用半透明填充，不遮挡图层
                 blank_rect = QRect(canvas_x, screen_y, int(self.canvas.width * self.scale), screen_h)
-                painter.fillRect(blank_rect, QColor("#f0f0f0"))
+                # 绘制半透明背景
+                painter.fillRect(blank_rect, QColor(240, 240, 240, 100))
+                # 绘制边框
+                painter.setPen(QPen(QColor("#cccccc"), 1, Qt.PenStyle.DashLine))
+                painter.drawRect(blank_rect)
+                # 绘制文字
                 painter.setPen(QColor("#999999"))
                 painter.drawText(blank_rect, Qt.AlignmentFlag.AlignCenter, "留白")
             
@@ -157,28 +165,61 @@ class CanvasWidget(QWidget):
             y_offset += screen.height
     
     def _draw_layers(self, painter: QPainter, canvas_x: int, canvas_y: int):
-        """绘制图层"""
+        """绘制图层（带缓存优化）"""
         for layer in self.canvas.layers:
             if not layer.visible:
                 continue
             
-            layer_img = layer.render()
-            if layer_img:
-                # PIL Image 转 QPixmap
-                img_data = layer_img.tobytes("raw", "RGBA")
-                qimg = QImage(img_data, layer_img.width, layer_img.height, QImage.Format.Format_RGBA8888)
-                pixmap = QPixmap.fromImage(qimg)
+            # 计算缩放后的尺寸
+            scaled_w = int(layer.width * self.scale)
+            scaled_h = int(layer.height * self.scale)
+            if scaled_w <= 0 or scaled_h <= 0:
+                continue
+            
+            # 生成缓存键（包含图层属性和缩放比例）
+            cache_key = f"{layer.width}_{layer.height}_{layer.rotation}_{layer.opacity}_{self.scale}"
+            
+            # 检查缓存
+            cached = self._pixmap_cache.get(layer.id)
+            if cached and cached[0] == cache_key:
+                # 使用缓存的 QPixmap
+                scaled_pixmap = cached[1]
+            else:
+                # 需要重新渲染
+                layer_img = layer.render()
+                if layer_img is None:
+                    continue
                 
-                # 缩放
-                scaled_w = int(layer.width * self.scale)
-                scaled_h = int(layer.height * self.scale)
-                if scaled_w > 0 and scaled_h > 0:
-                    scaled_pixmap = pixmap.scaled(scaled_w, scaled_h, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                # PIL Image 转 QPixmap
+                try:
+                    img_data = layer_img.tobytes("raw", "RGBA")
+                    qimg = QImage(img_data, layer_img.width, layer_img.height, QImage.Format.Format_RGBA8888)
+                    pixmap = QPixmap.fromImage(qimg)
                     
-                    # 绘制
-                    x = canvas_x + int(layer.x * self.scale)
-                    y = canvas_y + int(layer.y * self.scale)
-                    painter.drawPixmap(x, y, scaled_pixmap)
+                    # 缩放
+                    scaled_pixmap = pixmap.scaled(
+                        scaled_w, scaled_h, 
+                        Qt.AspectRatioMode.IgnoreAspectRatio, 
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    
+                    # 更新缓存
+                    self._pixmap_cache[layer.id] = (cache_key, scaled_pixmap)
+                except Exception as e:
+                    print(f"渲染图层 {layer.id} 失败: {e}")
+                    continue
+            
+            # 绘制
+            x = canvas_x + int(layer.x * self.scale)
+            y = canvas_y + int(layer.y * self.scale)
+            painter.drawPixmap(x, y, scaled_pixmap)
+    
+    def invalidate_layer_cache(self, layer_id: str = None):
+        """清除图层缓存"""
+        if layer_id:
+            self._pixmap_cache.pop(layer_id, None)
+        else:
+            self._pixmap_cache.clear()
     
     def _draw_selection(self, painter: QPainter, canvas_x: int, canvas_y: int):
         """绘制选中框"""
@@ -501,6 +542,7 @@ class CanvasEditor(QWidget):
         self.canvas = canvas
         self.canvas_widget.canvas = canvas
         self.canvas_widget.history = CanvasHistoryManager(canvas)
+        self.canvas_widget.invalidate_layer_cache()  # 清除缓存
         self.canvas_widget.update()
     
     def add_text_layer(self, text: str, x: int = 100, y: int = 100):

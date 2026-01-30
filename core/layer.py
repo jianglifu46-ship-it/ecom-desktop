@@ -8,6 +8,11 @@ import uuid
 import os
 
 
+# 图片导入最大尺寸限制
+MAX_IMPORT_WIDTH = 600  # 最大宽度（画布宽度750的80%）
+MAX_IMPORT_HEIGHT = 800  # 最大高度
+
+
 @dataclass
 class Layer:
     """图层基类"""
@@ -85,37 +90,87 @@ class ImageLayer(Layer):
     """图片图层"""
     image_path: str = ""
     _image: Optional[Image.Image] = field(default=None, repr=False)
+    _render_cache: Optional[Image.Image] = field(default=None, repr=False)
+    _cache_key: str = field(default="", repr=False)
     layer_type: str = "image"
     
     def __post_init__(self):
         if self.name == "图层":
             self.name = "图片图层"
     
-    def load_image(self) -> bool:
-        """加载图片"""
+    def _invalidate_cache(self):
+        """清除缓存"""
+        self._render_cache = None
+        self._cache_key = ""
+    
+    def _get_cache_key(self) -> str:
+        """生成缓存键"""
+        return f"{self.width}_{self.height}_{self.rotation}_{self.opacity}"
+    
+    def load_image(self, auto_resize: bool = True) -> bool:
+        """加载图片，可选自动缩放到合适尺寸"""
         if self.image_path and os.path.exists(self.image_path):
             try:
                 self._image = Image.open(self.image_path).convert("RGBA")
-                self.width = self._image.width
-                self.height = self._image.height
+                orig_w, orig_h = self._image.width, self._image.height
+                
+                # 自动缩放大图
+                if auto_resize and (orig_w > MAX_IMPORT_WIDTH or orig_h > MAX_IMPORT_HEIGHT):
+                    ratio_w = MAX_IMPORT_WIDTH / orig_w
+                    ratio_h = MAX_IMPORT_HEIGHT / orig_h
+                    ratio = min(ratio_w, ratio_h)
+                    
+                    new_w = int(orig_w * ratio)
+                    new_h = int(orig_h * ratio)
+                    
+                    self._image = self._image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                    self.width = new_w
+                    self.height = new_h
+                else:
+                    self.width = self._image.width
+                    self.height = self._image.height
+                
+                self._invalidate_cache()
                 return True
             except Exception as e:
                 print(f"加载图片失败: {e}")
         return False
     
-    def set_image(self, image: Image.Image):
-        """直接设置图片"""
+    def set_image(self, image: Image.Image, auto_resize: bool = True):
+        """直接设置图片，可选自动缩放"""
         self._image = image.convert("RGBA")
-        self.width = self._image.width
-        self.height = self._image.height
+        orig_w, orig_h = self._image.width, self._image.height
+        
+        # 自动缩放大图
+        if auto_resize and (orig_w > MAX_IMPORT_WIDTH or orig_h > MAX_IMPORT_HEIGHT):
+            ratio_w = MAX_IMPORT_WIDTH / orig_w
+            ratio_h = MAX_IMPORT_HEIGHT / orig_h
+            ratio = min(ratio_w, ratio_h)
+            
+            new_w = int(orig_w * ratio)
+            new_h = int(orig_h * ratio)
+            
+            self._image = self._image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            self.width = new_w
+            self.height = new_h
+        else:
+            self.width = self._image.width
+            self.height = self._image.height
+        
+        self._invalidate_cache()
     
     def render(self, scale: float = 1.0) -> Optional[Image.Image]:
-        """渲染图片图层"""
+        """渲染图片图层（带缓存）"""
         if self._image is None:
             self.load_image()
         
         if self._image is None:
             return None
+        
+        # 检查缓存
+        cache_key = self._get_cache_key()
+        if self._render_cache is not None and self._cache_key == cache_key:
+            return self._render_cache
         
         # 缩放
         if self.width != self._image.width or self.height != self._image.height:
@@ -132,6 +187,10 @@ class ImageLayer(Layer):
             alpha = img.split()[3]
             alpha = alpha.point(lambda x: int(x * self.opacity))
             img.putalpha(alpha)
+        
+        # 更新缓存
+        self._render_cache = img
+        self._cache_key = cache_key
         
         return img
     
@@ -169,13 +228,23 @@ class TextLayer(Layer):
     text_align: str = "left"  # left, center, right
     line_height: float = 1.5
     layer_type: str = "text"
+    _render_cache: Optional[Image.Image] = field(default=None, repr=False)
+    _cache_key: str = field(default="", repr=False)
     
     def __post_init__(self):
         if self.name == "图层":
             self.name = f"文字: {self.text[:10]}"
     
+    def _get_cache_key(self) -> str:
+        """生成缓存键"""
+        return f"{self.text}_{self.font_size}_{self.font_color}_{self.width}_{self.height}_{self.rotation}_{self.opacity}"
+    
     def render(self, scale: float = 1.0) -> Optional[Image.Image]:
-        """渲染文字图层"""
+        """渲染文字图层（带缓存）"""
+        cache_key = self._get_cache_key()
+        if self._render_cache is not None and self._cache_key == cache_key:
+            return self._render_cache
+        
         # 创建透明背景
         img = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
@@ -202,6 +271,10 @@ class TextLayer(Layer):
             alpha = img.split()[3]
             alpha = alpha.point(lambda x: int(x * self.opacity))
             img.putalpha(alpha)
+        
+        # 更新缓存
+        self._render_cache = img
+        self._cache_key = cache_key
         
         return img
     
@@ -282,14 +355,24 @@ class ShapeLayer(Layer):
     stroke_color: str = "#000000"
     stroke_width: int = 1
     layer_type: str = "shape"
+    _render_cache: Optional[Image.Image] = field(default=None, repr=False)
+    _cache_key: str = field(default="", repr=False)
     
     def __post_init__(self):
         if self.name == "图层":
             shape_names = {"rectangle": "矩形", "ellipse": "椭圆", "line": "线条"}
             self.name = f"形状: {shape_names.get(self.shape_type, '形状')}"
     
+    def _get_cache_key(self) -> str:
+        """生成缓存键"""
+        return f"{self.shape_type}_{self.fill_color}_{self.stroke_color}_{self.stroke_width}_{self.width}_{self.height}_{self.rotation}_{self.opacity}"
+    
     def render(self, scale: float = 1.0) -> Optional[Image.Image]:
-        """渲染形状图层"""
+        """渲染形状图层（带缓存）"""
+        cache_key = self._get_cache_key()
+        if self._render_cache is not None and self._cache_key == cache_key:
+            return self._render_cache
+        
         img = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         
@@ -326,6 +409,10 @@ class ShapeLayer(Layer):
             alpha = img.split()[3]
             alpha = alpha.point(lambda x: int(x * self.opacity))
             img.putalpha(alpha)
+        
+        # 更新缓存
+        self._render_cache = img
+        self._cache_key = cache_key
         
         return img
     

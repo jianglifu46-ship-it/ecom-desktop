@@ -605,30 +605,41 @@ class MainWindow(QMainWindow):
     
     def _on_remove_bg(self):
         """抠图"""
-        canvas = self.canvas_editor.get_canvas()
-        layer = canvas.get_selected_layer()
-        
-        if layer is None:
-            QMessageBox.information(self, "提示", "请先选择一个图片图层")
-            return
-        
-        from core.layer import ImageLayer
-        if not isinstance(layer, ImageLayer):
-            QMessageBox.information(self, "提示", "请选择图片图层")
-            return
-        
-        from tools.remove_bg import remove_background_from_image, is_available
-        if not is_available():
-            QMessageBox.warning(self, "提示", "抠图功能不可用，请安装 rembg")
-            return
-        
-        if layer._image:
+        try:
+            canvas = self.canvas_editor.get_canvas()
+            layer = canvas.get_selected_layer()
+            
+            if layer is None:
+                QMessageBox.information(self, "提示", "请先选择一个图片图层")
+                return
+            
+            from core.layer import ImageLayer
+            if not isinstance(layer, ImageLayer):
+                QMessageBox.information(self, "提示", "请选择图片图层")
+                return
+            
+            from tools.remove_bg import remove_background_from_image, is_available, get_error_message
+            if not is_available():
+                err_msg = get_error_message()
+                QMessageBox.warning(self, "提示", f"抠图功能不可用\n{err_msg}\n\n请安装: pip install rembg")
+                return
+            
+            if layer._image is None:
+                QMessageBox.warning(self, "提示", "图层图片未加载")
+                return
+            
             result = remove_background_from_image(layer._image)
             if result:
                 layer.set_image(result)
                 self.canvas_editor.canvas_widget.history.save_state("智能抠图")
                 self.canvas_editor.canvas_widget.update()
                 QMessageBox.information(self, "成功", "抠图完成")
+            else:
+                QMessageBox.warning(self, "失败", "抠图处理失败，请查看控制台日志")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "错误", f"抠图时发生错误:\n{str(e)}")
     
     def _on_upscale(self):
         """放大"""
@@ -636,25 +647,36 @@ class MainWindow(QMainWindow):
     
     def _on_enhance(self):
         """增强"""
-        canvas = self.canvas_editor.get_canvas()
-        layer = canvas.get_selected_layer()
-        
-        if layer is None:
-            QMessageBox.information(self, "提示", "请先选择一个图片图层")
-            return
-        
-        from core.layer import ImageLayer
-        if not isinstance(layer, ImageLayer):
-            QMessageBox.information(self, "提示", "请选择图片图层")
-            return
-        
-        from tools.enhance import enhance_image
-        if layer._image:
+        try:
+            canvas = self.canvas_editor.get_canvas()
+            layer = canvas.get_selected_layer()
+            
+            if layer is None:
+                QMessageBox.information(self, "提示", "请先选择一个图片图层")
+                return
+            
+            from core.layer import ImageLayer
+            if not isinstance(layer, ImageLayer):
+                QMessageBox.information(self, "提示", "请选择图片图层")
+                return
+            
+            if layer._image is None:
+                QMessageBox.warning(self, "提示", "图层图片未加载")
+                return
+            
+            from tools.enhance import enhance_image
             result = enhance_image(layer._image, "auto")
-            layer.set_image(result)
-            self.canvas_editor.canvas_widget.history.save_state("图片增强")
-            self.canvas_editor.canvas_widget.update()
-            QMessageBox.information(self, "成功", "增强完成")
+            if result:
+                layer.set_image(result)
+                self.canvas_editor.canvas_widget.history.save_state("图片增强")
+                self.canvas_editor.canvas_widget.update()
+                QMessageBox.information(self, "成功", "增强完成")
+            else:
+                QMessageBox.warning(self, "失败", "图片增强失败")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "错误", f"增强时发生错误:\n{str(e)}")
     
     def _on_new(self):
         """新建"""

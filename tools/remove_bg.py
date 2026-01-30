@@ -1,9 +1,10 @@
 """
 智能抠图工具 - 使用 Rembg
-延迟加载避免打包问题
+延迟加载避免打包问题，添加完善的错误处理防止闪退
 """
 import os
 import io
+import traceback
 from typing import Optional, List
 from PIL import Image
 
@@ -11,11 +12,12 @@ from PIL import Image
 _rembg_checked = False
 _has_rembg = False
 _remove_func = None
+_error_msg = ""
 
 
 def _check_rembg():
     """延迟检查 rembg 是否可用"""
-    global _rembg_checked, _has_rembg, _remove_func
+    global _rembg_checked, _has_rembg, _remove_func, _error_msg
     if _rembg_checked:
         return _has_rembg
     
@@ -24,12 +26,21 @@ def _check_rembg():
         from rembg import remove
         _remove_func = remove
         _has_rembg = True
-    except ImportError:
+        _error_msg = ""
+    except ImportError as e:
         _has_rembg = False
-    except Exception:
+        _error_msg = f"rembg 未安装: {e}"
+    except Exception as e:
         _has_rembg = False
+        _error_msg = f"rembg 加载失败: {e}"
     
     return _has_rembg
+
+
+def get_error_message() -> str:
+    """获取错误信息"""
+    _check_rembg()
+    return _error_msg
 
 
 def remove_background(input_path: str, output_path: str = None) -> Optional[Image.Image]:
@@ -44,7 +55,7 @@ def remove_background(input_path: str, output_path: str = None) -> Optional[Imag
         处理后的 PIL Image 对象，失败返回 None
     """
     if not _check_rembg():
-        print("抠图功能不可用，请安装 rembg: pip install rembg[gpu] 或 pip install rembg")
+        print(f"抠图功能不可用: {_error_msg}")
         return None
     
     try:
@@ -60,6 +71,7 @@ def remove_background(input_path: str, output_path: str = None) -> Optional[Imag
         return result
     except Exception as e:
         print(f"抠图失败: {e}")
+        traceback.print_exc()
         return None
 
 
@@ -71,23 +83,41 @@ def remove_background_from_image(image: Image.Image) -> Optional[Image.Image]:
         image: PIL Image 对象
     
     Returns:
-        处理后的 PIL Image 对象
+        处理后的 PIL Image 对象，失败返回 None
     """
     if not _check_rembg():
+        print(f"抠图功能不可用: {_error_msg}")
+        return None
+    
+    if image is None:
+        print("抠图失败: 图片对象为空")
         return None
     
     try:
+        # 确保图片格式正确
+        if image.mode != 'RGBA':
+            image = image.convert('RGBA')
+        
         # 转换为字节
         buffer = io.BytesIO()
         image.save(buffer, format='PNG')
         input_data = buffer.getvalue()
         
+        # 调用 rembg
         output_data = _remove_func(input_data)
+        
+        if output_data is None:
+            print("抠图失败: rembg 返回空数据")
+            return None
+        
+        # 解析结果
         result = Image.open(io.BytesIO(output_data))
+        result = result.convert('RGBA')
         
         return result
     except Exception as e:
         print(f"抠图失败: {e}")
+        traceback.print_exc()
         return None
 
 
