@@ -1,0 +1,26 @@
+# 电商详情页管理系统 - 桌面客户端依赖
+
+# GUI 框架
+PyQt6>=6.4.0
+
+# 图像处理
+Pillow>=9.0.0
+opencv-python>=4.6.0
+numpy>=1.21.0
+
+# 网络请求
+requests>=2.28.0
+
+# 智能抠图（可选，约 170MB）
+# rembg>=2.0.30
+
+# 图片放大（可选，需要单独下载模型）
+# realesrgan>=0.3.0
+
+# 打包工具
+pyinstaller>=5.0.0
+
+# 开发工具（可选）
+# black
+# flake8
+# pytest
