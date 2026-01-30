@@ -256,6 +256,9 @@ class CanvasWidget(QWidget):
         painter.setPen(QPen(QColor("white"), 1))
         for hx, hy in handles:
             painter.drawRect(hx - handle_size // 2, hy - handle_size // 2, handle_size, handle_size)
+        
+        # 重置画笔状态，避免影响后续绘制
+        painter.setBrush(Qt.BrushStyle.NoBrush)
     
     def _draw_guide_lines(self, painter: QPainter, canvas_x: int, canvas_y: int):
         """绘制对齐辅助线"""
