@@ -13,7 +13,7 @@ from pathlib import Path
 
 import sys
 sys.path.insert(0, str(__file__).rsplit('/', 2)[0])
-from config import UIConfig
+from config import UIConfig, save_asset_folders, load_asset_folders
 from services.file_watcher import asset_manager, SUPPORTED_FORMATS
 
 
@@ -176,14 +176,22 @@ class AssetsPanel(QWidget):
         """设置素材管理器"""
         asset_manager.add_callback(self._on_asset_change)
         
-        # 添加默认素材目录
-        default_dirs = [
-            os.path.expanduser("~/Pictures"),
-            os.path.expanduser("~/Desktop"),
-        ]
-        for d in default_dirs:
-            if os.path.isdir(d):
-                asset_manager.add_watch_path(d)
+        # 加载保存的素材文件夹路径
+        saved_folders = load_asset_folders()
+        if saved_folders:
+            # 使用保存的文件夹
+            for folder in saved_folders:
+                if os.path.isdir(folder):
+                    asset_manager.add_watch_path(folder)
+        else:
+            # 首次运行，添加默认素材目录
+            default_dirs = [
+                os.path.expanduser("~/Pictures"),
+                os.path.expanduser("~/Desktop"),
+            ]
+            for d in default_dirs:
+                if os.path.isdir(d):
+                    asset_manager.add_watch_path(d)
         
         # 刷新素材列表
         self._refresh_assets()
@@ -235,6 +243,8 @@ class AssetsPanel(QWidget):
         )
         if folder:
             asset_manager.add_watch_path(folder)
+            # 保存文件夹路径
+            save_asset_folders(asset_manager.watch_paths)
             self._refresh_assets()
     
     def add_files(self, file_paths: list):

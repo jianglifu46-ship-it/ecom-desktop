@@ -159,3 +159,26 @@ def clear_token():
     """清除登录 token"""
     if TOKEN_FILE.exists():
         TOKEN_FILE.unlink()
+
+
+# 素材库配置文件
+ASSETS_CONFIG_FILE = USER_DATA_DIR / "assets_config.json"
+
+def save_asset_folders(folders: list):
+    """保存素材库文件夹路径"""
+    import json
+    data = {"folders": folders}
+    with open(ASSETS_CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
+
+def load_asset_folders() -> list:
+    """加载素材库文件夹路径"""
+    import json
+    if ASSETS_CONFIG_FILE.exists():
+        try:
+            with open(ASSETS_CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("folders", [])
+        except:
+            pass
+    return []
